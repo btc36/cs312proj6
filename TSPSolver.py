@@ -342,4 +342,13 @@ class TSPSolver:
 		
 
 
-       
+      	class tabuList:
+		def __init__(self):
+			self.usedSolutions = {}
+		def addSolution(self,solution):
+			self.usedSolutions[solution] = True #This value could be anything
+		def isTabu(self,solution):
+			if solution in self.usedSolutions:
+				return True
+			else:
+				return False 
