@@ -85,8 +85,61 @@ class TSPSolver:
 		algorithm</returns> 
 	'''
 
-	def greedy( self,time_allowance=60.0 ):
-		return self.defaultRandomTour()
+		def greedy( self,time_allowance=60.0 ):
+		results = {}
+		cities = self._scenario.getCities()
+		ncities = len(cities)
+		foundTour = False
+		count = 0
+		bssf = None
+		start_time = time.time()
+		while not foundTour and time.time() - start_time < time_allowance:
+			bestRoute = None
+			minScore = float('inf')
+			#Tries greedy from every startpoint
+			for i in range(ncities):
+				route = []
+				#Start with the first node
+				citiesLeft = list(range(0,ncities))
+				currentCity = i
+				route.append(cities[currentCity])
+				citiesLeft.remove(currentCity)
+				while(len(route) != ncities):
+					minCost = float('inf')
+					nextCity = None
+					#Picks the closest available city
+					for city in citiesLeft:
+						newCost = cities[currentCity].costTo(cities[city])
+						if(newCost < minCost):
+							minCost = newCost
+							nextCity = city
+					if nextCity == None:
+						#Just take the first element, if there are multiple,
+						#They are both infinite so it doesn't matter
+						nextCity = citiesLeft[0]
+					route.append(cities[nextCity])
+					citiesLeft.remove(nextCity)
+					currentCity = nextCity
+				newRoute = TSPSolution(route)
+				newScore = newRoute.cost
+				if(newScore < minScore):
+					minScore = newScore
+					bestRoute = newRoute
+			bssf = bestRoute
+			count += 1
+			if bssf.cost < np.inf:
+				# Found a valid route
+				foundTour = True
+		end_time = time.time()
+		results['cost'] = bssf.cost if foundTour else math.inf
+		results['time'] = end_time - start_time
+		results['count'] = count
+		results['soln'] = bssf
+		results['max'] = None
+		results['total'] = None
+		results['pruned'] = None
+		return results
+	
 	
 	'''This is to separate work and reduce rows for branching and bounding'''
 	def MinimizeBySmallestInRow(self, list, row):
@@ -289,4 +342,4 @@ class TSPSolver:
 		
 
 
-
+       
