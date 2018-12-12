@@ -14,6 +14,7 @@ import numpy as np
 from TSPClasses import *
 import heapq
 import itertools
+import math
 
 
 
@@ -36,12 +37,12 @@ class TSPSolver:
 		which just finds a valid random tour.  Note this could be used to find your
 		initial BSSF.
 		</summary>
-		<returns>results dictionary for GUI that contains three ints: cost of solution, 
-		time spent to find solution, number of permutations tried during search, the 
-		solution found, and three null values for fields not used for this 
-		algorithm</returns> 
+		<returns>results dictionary for GUI that contains three ints: cost of solution,
+		time spent to find solution, number of permutations tried during search, the
+		solution found, and three null values for fields not used for this
+		algorithm</returns>
 	'''
-	
+
 	def defaultRandomTour( self, time_allowance=60.0 ):
 		results = {}
 		cities = self._scenario.getCities()
@@ -74,18 +75,18 @@ class TSPSolver:
 		return results
 
 	''' <summary>
-		This is the entry point for the greedy solver, which you must implement for 
+		This is the entry point for the greedy solver, which you must implement for
 		the group project (but it is probably a good idea to just do it for the branch-and
 		bound project as a way to get your feet wet).  Note this could be used to find your
 		initial BSSF.
 		</summary>
-		<returns>results dictionary for GUI that contains three ints: cost of best solution, 
+		<returns>results dictionary for GUI that contains three ints: cost of best solution,
 		time spent to find best solution, total number of solutions found, the best
-		solution found, and three null values for fields not used for this 
-		algorithm</returns> 
+		solution found, and three null values for fields not used for this
+		algorithm</returns>
 	'''
 
-		def greedy( self,time_allowance=60.0 ):
+	def greedy( self,time_allowance=60.0 ):
 		results = {}
 		cities = self._scenario.getCities()
 		ncities = len(cities)
@@ -139,8 +140,8 @@ class TSPSolver:
 		results['total'] = None
 		results['pruned'] = None
 		return results
-	
-	
+
+
 	'''This is to separate work and reduce rows for branching and bounding'''
 	def MinimizeBySmallestInRow(self, list, row):
 		smallest =list[row][0]
@@ -212,10 +213,10 @@ class TSPSolver:
 	''' <summary>
 			This is the entry point for the branch-and-bound algorithm that you will implement
 			</summary>
-			<returns>results dictionary for GUI that contains three ints: cost of best solution, 
+			<returns>results dictionary for GUI that contains three ints: cost of best solution,
 			time spent to find best solution, total number solutions found during search (does
-			not include the initial BSSF), the best solution found, and three more ints: 
-			max queue size, total number of states created, and number of pruned states.</returns> 
+			not include the initial BSSF), the best solution found, and three more ints:
+			max queue size, total number of states created, and number of pruned states.</returns>
 		'''
 	def branchAndBound( self, time_allowance=60.0 ):
 		results = {}
@@ -300,55 +301,115 @@ class TSPSolver:
 	''' <summary>
 		This is the entry point for the algorithm you'll write for your group project.
 		</summary>
-		<returns>results dictionary for GUI that contains three ints: cost of best solution, 
-		time spent to find best solution, total number of solutions found during search, the 
+		<returns>results dictionary for GUI that contains three ints: cost of best solution,
+		time spent to find best solution, total number of solutions found during search, the
 		best solution found.  You may use the other three field however you like.
-		algorithm</returns> 
+		algorithm</returns>
 	'''
 
-	def tabuList (self, route):
-		return True
 
 	def fancy( self,time_allowance=60.0 ):
 		results = self.greedy()
 		bssf = results['soln']
 		nCities = len(bssf.route)
+		cities = self._scenario.getCities()
+		ourTabuList = self.tabuList(nCities)
 		temp = copy.deepcopy(bssf)
 		start_time = time.time()
-		for i in range(nCities):
-			for j in range(nCities):
-				'''To Make Sure we don't exceed the time limit'''
-				if time.time()-start_time >= time_allowance:
-					break
-				'''Recalibrating path costs for replacing an individual city'''
-				temp.cost -= City.costTo(bssf.route[i], bssf.route[(i + 1)%nCities])
-				temp.cost -= City.costTo(bssf.route[(i - 1)%nCities], bssf.route[i])
-				temp.cost += City.costTo(bssf.route[j], bssf.route[i + 1])
-				temp.cost += City.costTo(bssf.route[i - 1], bssf.route[j])
+		#To Do:
+		#1. Make sure to keep track of best score found during looping
+		# If nothing better than BSSF is found, we don't update BSSF
+		# But we still replace our working solution with the best alternate we did find, even if the score goes down
+		# We need to keep track of what indexes we actually end up switching ~index1, ~index2. I have not created these variables yet
+		# We need to put the for loops below into a while loop that quits with the time limit and keeps track of what our BSSF is
+		print("---init bssf: " + str(bssf.cost))
+		temp = copy.deepcopy(bssf) #start at our init bssf
+		bestOption = copy.deepcopy(bssf)
+		while time.time()-start_time < time_allowance: #***Not sure if there is another stopping condition?
+			bestOption.cost = math.inf
+			index1 = 0
+			index2 = 0
+			'''check neighbors'''
+			for i in range(nCities):
+				for j in range(nCities):
+					'''skip when i == j bc that switch would be pointless'''
+					if i == j:
+						continue
 
-				'''altering the route paths'''
-				city = copy.deepcopy(temp.route[i])
-				temp.route[i] = copy.deepcopy(temp.route[j])
-				temp.route[j] = city
+					'''To Make Sure we don't exceed the time limit'''
+					if time.time()-start_time >= time_allowance:
+						break
 
-				'''check to see if the new route is in the tabu list'''
-				if (temp.route != self.tabuList(temp.route)):
-					'''check to see if the cost has improved'''
-					if (temp.cost < bssf.cost):
-						bssf = copy.deepcopy(temp)
-				'''revert list back so we can continue the algorithm'''
-				temp.route[j] = copy.deepcopy(temp.route[i])
-				temp.route[i]= city
-		
+					'''Recalibrating path costs for replacing an individual city'''
+					#***this would probs be faster but there are SO many cases that I vote we just find the cost of the new route
+					#***i.e. if i and j are next to each other this doesn't work. Or if j < i
+					# temp.cost -= City.costTo(cities[i], citi[(i + 1)%nCities])
+					# temp.cost -= City.costTo(cities[(i - 1)%nCities], cities[i])
+					# temp.cost += City.costTo(cities[j], cities[i + 1])
+					# temp.cost += City.costTo(cities[i - 1], cities[j])
+
+					'''check to see if the new route is in the tabu list'''
+					if not ourTabuList.isTabu(i,j): #slight optimization- putting this check outside everything
+						'''altering the route paths'''
+						city = copy.deepcopy(temp.route[i])
+						temp.route[i] = copy.deepcopy(temp.route[j])
+						temp.route[j] = city
+
+						'''recalibrating path costs (the easy way)'''
+						temp.cost = TSPSolution(temp.route).cost
+
+						'''check to see if the cost has improved'''
+						'''hold on to the best option, even if it's not better than the bssf'''
+						if temp.cost < bestOption.cost:
+							bestOption = copy.deepcopy(temp)
+							index1 = i
+							index2 = j
+						if temp.cost < bssf.cost:
+							bssf = copy.deepcopy(temp)
+							print(bssf.cost)
+							print(time.time() - start_time)
+
+					'''revert list back so we can continue the algorithm'''
+					temp.route[j] = copy.deepcopy(temp.route[i])
+					temp.route[i]= city
+			ourTabuList.addSwitch(index1,index2)
+			ourTabuList.decrementTabuList()
+			'''use the best result'''
+			temp = bestOption
+
+		end_time = time.time()
+		results['cost'] = bssf.cost
+		results['time'] = end_time - start_time
+		results['soln'] = bssf
+
+		print("end bssf: " + str(bssf.cost))
+		return results
 
 
-      	class tabuList:
-		def __init__(self):
-			self.usedSolutions = {}
-		def addSolution(self,solution):
-			self.usedSolutions[solution] = True #This value could be anything
-		def isTabu(self,solution):
-			if solution in self.usedSolutions:
-				return True
+	class tabuList:
+		def __init__(self,nCities):
+			#init matrix to size ncities X ncities with 0's
+			self.tabuMatrix = np.zeros((nCities, nCities), dtype=int)
+			self.limit = 10 # math.floor(nCities/2) This can be whatever
+			self.nCities = nCities
+		def addSwitch(self,index1,index2):
+			self.tabuMatrix[index1][index2] = self.limit
+			self.tabuMatrix[index2][index1] = self.limit
+		def isTabu(self,index1,index2):
+			if self.tabuMatrix[index1][index2] == 0:
+				return False
 			else:
-				return False 
+				return True
+		# def initializeMatrix(self):
+		# 	for i in range(nCities):
+		# 		self.tabuMatrix[i] = []
+		# 		for j in range(nCities):
+		# 			self.tabuMatrix[i][j] = 0
+		def decrementTabuList(self):
+			#decrement all non-zero entries
+			self.tabuMatrix[self.tabuMatrix > 0] -=1
+			# for i in range(nCities):
+			# 	for j in range(nCities):
+			# 		currValue = self.tabuMatrix[i][j]
+			# 		if currValue != 0:
+			# 			self.tabuMatrix[i][j] = curValue -1
