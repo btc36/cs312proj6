@@ -306,15 +306,20 @@ class TSPSolver:
 		algorithm</returns> 
 	'''
 
-	def tabuList (self, route):
-		return True
 
 	def fancy( self,time_allowance=60.0 ):
 		results = self.greedy()
 		bssf = results['soln']
 		nCities = len(bssf.route)
+		ourTabuList = self.tabuList(nCities)
 		temp = copy.deepcopy(bssf)
 		start_time = time.time()
+		#To Do:
+		#1. Make sure to keep track of best score found during looping
+		# If nothing better than BSSF is found, we don't update BSSF
+		# But we still replace our working solution with the best alternate we did find, even if the score goes down
+		# We need to keep track of what indexes we actually end up switching ~index1, ~index2. I have not created these variables yet
+		# We need to put the for loops below into a while loop that quits with the time limit and keeps track of what our BSSF is
 		for i in range(nCities):
 			for j in range(nCities):
 				'''To Make Sure we don't exceed the time limit'''
@@ -332,23 +337,41 @@ class TSPSolver:
 				temp.route[j] = city
 
 				'''check to see if the new route is in the tabu list'''
-				if (temp.route != self.tabuList(temp.route)):
+				if (!ourTabuList.isTabu(i,j)):
 					'''check to see if the cost has improved'''
 					if (temp.cost < bssf.cost):
 						bssf = copy.deepcopy(temp)
 				'''revert list back so we can continue the algorithm'''
 				temp.route[j] = copy.deepcopy(temp.route[i])
 				temp.route[i]= city
+			ourTabuList.addSwitch(index1,index2) #This needs to get the indexes of the two cities that actually switched
+			ourTabuList.decrementTabuList()
+			
 		
 
 
       	class tabuList:
-		def __init__(self):
-			self.usedSolutions = {}
-		def addSolution(self,solution):
-			self.usedSolutions[solution] = True #This value could be anything
-		def isTabu(self,solution):
-			if solution in self.usedSolutions:
-				return True
-			else:
-				return False 
+		def __init__(self,nCities):
+			self.tabuMatrix = []
+			self.limit = 10 #This can be whatever
+			self.nCites = nCities
+			initializeMatrix(nCities)
+		def addSwitch(self,index1,index2):
+			self.tabuMatrix[index1][index2] = self.limit
+			self.tabuMatrix[index2][index1] = self.limit
+		def isTabu(self,index1,index2):
+			if self.tabuMatrix[index1][index2] == 0:
+				return true
+			else: 
+				return false
+		def initializeMatrix(self):
+			for i in range(nCities):
+				self.tabuMatrix[i] = []
+				for j in range(nCities):
+					self.tabuMatrix[i][j] = 0
+		def decrementTabuList(self,numOfCities):
+			for i in range(nCities):
+				for j in range(nCites);
+					currValue = self.tabuMatrix[i][j]
+					if currValue != 0:
+						self.tabuMatrix[i][j] = curValue -1
