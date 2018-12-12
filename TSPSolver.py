@@ -364,15 +364,16 @@ class TSPSolver:
 							bestOption = copy.deepcopy(temp)
 							index1 = i
 							index2 = j
+
 						if temp.cost < bssf.cost:
 							bssf = copy.deepcopy(temp)
 							print(bssf.cost)
 							print(time.time() - start_time)
 
-					'''revert list back so we can continue the algorithm'''
-					temp.route[j] = copy.deepcopy(temp.route[i])
-					temp.route[i]= city
-			ourTabuList.addSwitch(index1,index2)
+						'''revert list back so we can continue the algorithm'''
+						temp.route[j] = copy.deepcopy(temp.route[i])
+						temp.route[i] = city
+			ourTabuList.addSwitch(index1, index2)
 			ourTabuList.decrementTabuList()
 			'''use the best result'''
 			temp = bestOption
