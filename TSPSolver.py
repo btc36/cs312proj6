@@ -15,22 +15,54 @@ from TSPClasses import *
 import heapq
 import itertools
 import math
+import heapq
+
+	#////////////////////////////BRANCH AND BOUND CLASSES////////////////////////////////////
+class node:
+	def __init__( self, _city, _cost, _matrix, _parent, _children, _depth ): #space: O(n^2)
+		self.city = _city
+		self.cost = _cost
+		self.matrix = _matrix #space: O(n^2)
+		self.parent = _parent #index of parent in tree (array)
+		self.children = _children #array of children indexes. Space: O(n)
+		self.depth = _depth
+
+	def __lt__(self, other):
+		#sorting by depth, then by cost so we get an answer fast
+		if self.depth == other.depth: return self.cost < other.cost
+		return self.depth > other.depth
+
+	def __str__(self):
+		return("city:" + str(self.city) + " cost:" + str(self.cost) + " parentInd:"
+		+ str(self.parent) + " numChildren:" + str(len(self.children)) + " depth:" + str(self.depth))
 
 
+class MinHeap(object):
+   def __init__(self, initial=None, key=lambda x:x): #time: O(n) space:O(n)
+       self.key = key
+       if initial:
+           self._data = [(key(item), item) for item in initial] #O(n)
+           heapq.heapify(self._data) #O(logn)
+       else:
+           self._data = []
+
+   def push(self, item): #time: O(logn)
+       heapq.heappush(self._data, (self.key(item), item)) #assuming this is O(logn)
+
+   def pop(self): #time: O(logn)
+	   return heapq.heappop(self._data)[1] #assuming this is O(logn)
+
+   def __len__(self):
+	   return len(self._data)
 
 class TSPSolver:
 	def __init__( self, gui_view ):
 		self._scenario = None
+		self.maxHeap = 0
+		self.bssf = None
 
 	def setupWithScenario( self, scenario ):
 		self._scenario = scenario
-		self._bssf = math.inf
-		self.boundCost = 0
-		self.PQ = []
-		self.maxQueueSize = 0
-		self.pruned = 0
-		self.total = 0
-
 
 	''' <summary>
 		This is the entry point for the default solver
@@ -42,6 +74,124 @@ class TSPSolver:
 		solution found, and three null values for fields not used for this
 		algorithm</returns>
 	'''
+	#////////////////////////////BRANCH AND BOUND CLASSES////////////////////////////////////
+	class nodeObject:
+		def __init__(self,position,tour=[],cost=0,lowerBound=0,costMatrix=[],tourIndex = []):
+		    self.tour = tour
+		    self.cost = cost
+		    self.lowerBound = lowerBound
+		    self.costMatrix = costMatrix
+		    self.position = position
+		    self.tourIndex = tourIndex
+		def getTour(self):
+		    return self.tour
+		def getTourIndex(self):
+		    return self.tourIndex
+		def getCost(self):
+		    return self.cost
+		def setCost(self,newCost):
+		    self.cost = newCost
+		def getLowerBound(self):
+		    return self.lowerBound
+		def setLowerBound(self,newLB):
+		    self.lowerBound = newLB
+		def getMatrix(self):
+		    return self.costMatrix
+		def setMatrix(self,newMatrix):
+		    self.costMatrix = newMatrix
+		def createChild(self,index,city,cities,origin):
+		    #Add distance to existing cost
+		    newDistance = cities[origin].costTo(city)
+		    newCost = self.cost + newDistance
+		    #Use deep copy to avoid changing parent
+		    newMatrix = copy.deepcopy(self.costMatrix)
+		    newTour = copy.deepcopy(self.tour)
+		    tourIndex = copy.deepcopy(self.tourIndex)
+		    #Keep track of where I have been, objects for GUI,
+		    #And index for matrix and determining available neighbors
+		    tourIndex.append(index)
+		    newTour.append(city)
+		    #Keep track of which city this child is at
+		    curPosition = newMatrix[self.position]
+		    #Set certain values to infinity
+		    newMatrix[index][self.position] = float('inf')
+		    for i in range(len(curPosition)):
+		        curPosition[i] = float('inf')
+		        newMatrix[i][index] = float('inf')
+		    newMatrix = self.transformMatrix(newMatrix)
+		    child = self.__class__(index,tour= newTour,cost= newCost,lowerBound = newMatrix[1],costMatrix = newMatrix[0],tourIndex = tourIndex)
+		    return child
+		def createParentMatrix(self,cities):
+		    nCities = len(cities)
+		    for i in range(nCities):
+		        self.costMatrix.append([])
+		        currRow = self.costMatrix[i]
+		        for j in range(nCities):
+		            currRow.append(cities[i].costTo(cities[j]))
+		    matrixInfo = self.transformMatrix(self.costMatrix)
+		    self.costMatrix = matrixInfo[0]
+		    self.lowerBound = matrixInfo[1]
+		def transformMatrix(self,costMatrix):
+		    #Don't want to override old bound
+		    newBound = copy.deepcopy(self.lowerBound)
+		    #Check rows, and then I check columns
+		    #If there is already a 0, nothing will change
+		    for row in costMatrix:
+		        lowestRowValue = float('inf')
+		        for value in row:
+		            if value < lowestRowValue:
+		                lowestRowValue = value
+		        k = 0
+		        if(lowestRowValue != float('inf')):
+		            newBound += lowestRowValue
+		            for value in row:
+		                row[k] = value - lowestRowValue
+		                k +=1
+		    for col in range(len(costMatrix)):
+		        lowestColValue = float('inf')
+		        for c in range(len(costMatrix)):
+		            colValue = costMatrix[c][col]
+		            if colValue < lowestColValue:
+		                lowestColValue = colValue
+		        if(lowestColValue != float('inf')):
+		            newBound += lowestColValue
+		            for c in range(len(costMatrix)):
+		                costMatrix[c][col] = costMatrix[c][col] - lowestColValue
+		    return [costMatrix,newBound]
+
+	class priorityQueue:
+		def __init__(self):
+		    self.queue = []
+		def getNextNode(self,numCities):
+		    #I scan the array, and return a node based on lowerBound/(progress*2)
+		    nextNode = None
+		    nextNodeValue = float('inf')
+		    for node in self.queue:
+		        curScore = node.getLowerBound()
+		        curProgress = len(node.getTour())
+		        priorityScore = curScore/curProgress*4
+		        if(priorityScore < nextNodeValue):
+		            nextNode = node
+		            nextNodeValue = priorityScore
+		    self.queue.remove(nextNode)
+		    return nextNode
+		    #Performs a search and returns the result based on the priority
+		def checkNewBSSF(self,newBSSF):
+		    count = 0
+		    for node in self.queue:
+		        if node.getLowerBound() > newBSSF:
+		            self.queue.remove(node)
+		            count += 1
+		    return count
+		    #Removes nodes no longer to be considered
+		def insert(self,newNode):
+		    self.queue.append(newNode)
+		def getLength(self):
+		    return len(self.queue)
+
+
+
+
 
 	def defaultRandomTour( self, time_allowance=60.0 ):
 		results = {}
@@ -139,162 +289,93 @@ class TSPSolver:
 		results['max'] = None
 		results['total'] = None
 		results['pruned'] = None
+		results['bssf'] = bssf
 		return results
 
-
-	'''This is to separate work and reduce rows for branching and bounding'''
-	def MinimizeBySmallestInRow(self, list, row):
-		smallest =list[row][0]
-		for i in range(len(list[row])):
-			if list[row][i] < smallest:
-				smallest = list[row][i]
-		for i in range(len(list[row])):
-			list[row][i] -= smallest
-		self.boundCost += smallest
-		return smallest
-
-	'''This is to separate work and reduce cols for branching and bounding'''
-
-	def MinimizeBySmallestInCol(self, list, col):
-		smallest = list[0][col]
-		for i in range(len(list)):
-			if list[i][col] < smallest:
-				smallest = list[i][col]
-		for i in range(len(list)):
-			list[i][col] -= smallest
-		self.boundCost += smallest
-		return smallest
-
-	'''this infinitizes the appropriate rows and columns'''
-
-
-	'''the row is also the entry city in this case and this function should be recursive'''
-	def partials(self, list, row, col, bssf):
-		if(len(self.PQ) == 0):
-			return bssf
-		partial = []
-		for i in range(len(list)):
-			partial.append([])
-			for j in range(len(list[i])):
-				if(i == row or j == col):
-					partial[i].append(math.inf)
-				else:
-					partial[i].append(list[i][j])
-		partial[col][row] = math.inf
-		for i in range(len(list)):
-			if not i == row:
-				bssf += self.MinimizeBySmallestInRow(partial, i)
-		for i in range(len(list)):
-			if not i == col:
-				bssf += self.MinimizeBySmallestInCol(partial, i)
-		return bssf
-
-	'''find function so no repeats'''
-	def find(self, city, usedCities):
-		for i in range(len(usedCities)):
-			if city._index == usedCities[i]._index:
-				return i
-		return -1
-
-	'''this is to add routes if we should continue with our partials'''
-	def addRoutes(self, usedCities, allCities, cost):
-		for i in range(len(allCities)):
-			if self.find(allCities[i], usedCities) == -1:
-				temp= []
-				temp.append([])
-				temp[0]= copy.deepcopy(usedCities)
-				temp[0].append(allCities[i])
-				temp.append(copy.deepcopy(cost))
-				self.PQ.insert(0, temp)
-				self.total += 1
-		if(len(self.PQ) > self.maxQueueSize):
-			self.maxQueueSize = len(self.PQ)
-
-	''' <summary>
-			This is the entry point for the branch-and-bound algorithm that you will implement
-			</summary>
-			<returns>results dictionary for GUI that contains three ints: cost of best solution,
-			time spent to find best solution, total number solutions found during search (does
-			not include the initial BSSF), the best solution found, and three more ints:
-			max queue size, total number of states created, and number of pruned states.</returns>
-		'''
 	def branchAndBound( self, time_allowance=60.0 ):
+		#Use these to keep track of stats
+		maxQueue = 0
+		totalSolutions = 0
+		numPruned = 0
+		statesCreated = 1
 		results = {}
-		results =self.greedy()
-		list= []
 		cities = self._scenario.getCities()
 		ncities = len(cities)
-		bssf = self._bssf
-		cost = 0
-
-		'''creating the initial reduced cost matrix'''
-		for i in range(ncities):
-			list.append([])
-			for j in range(ncities):
-				list[i].append(City.costTo(cities[i], cities[j]))
-		'''reducing all the row costs by the smallest'''
-		for i in range(ncities):
-			cost += self.MinimizeBySmallestInRow(list, i)
-			'''reducing all the col cost by smallest ... also dimensions are the same for both'''
-		for i in range(ncities):
-			cost += self.MinimizeBySmallestInCol(list, i)
-		self.PQ = []
-		for i in range(ncities):
-			self.PQ.append([])
-			self.PQ[i].append([])
-			self.PQ[i][0].append(cities[i])
-			self.PQ[i].append(copy.deepcopy(cost))
-		cur = self.PQ.pop(0)[0][0]
-		self.maxQueueSize = len(self.PQ)
-		self.total = len(self.PQ)
-		nextBssf = []
-		nextBssf.append([])
-		nextBssf[0].append(cur)
-		nextBssf.append(cost)
-		count = 0
+		#Determines if I found atleast one solution
+		foundTour = False
+		#Don't want to end the loop till all nodes have been tried
+		foundAllTours = False
+		#I used my greedy algorithm to get my original BSSF
+		greedyResult = self.greedy()
+		BRSF = greedyResult
+		bssfCost = greedyResult['cost']
+		nodeQueue = self.priorityQueue()
+		#I always start the tour on the first Node
+		firstNode = self.nodeObject(0,tour=[cities[0]],tourIndex=[0])
+		firstNode.createParentMatrix(cities)
+		#My queue starts empty, so I use this boolean to
+		# not check for an empty queue till after the first node
+		endResult = False
 		start_time = time.time()
-		while len(self.PQ) > 1 and time.time()-start_time < time_allowance:
-			count += 1
-			nextBssf[1] = self.partials(list, cur._index, self.PQ[0][0][len(self.PQ[0][0]) - 1]._index, self.PQ[0][1])
-			'''if the next bssf is better than our current we choose to go further down these paths'''
-			if nextBssf[1] < bssf.cost:
-				'''add the next code we found the cost to, to our list'''
-				nextBssf[0].append(self.PQ[0][0][len(self.PQ[0][0]) - 1])
-				'''remove the top of the queue'''
-				self.PQ.pop(0)
-				self.pruned +=1
-				'''add all its child routes; ie if a->b is good we add a->b->c and a->b->d to the top of our pq'''
-				self.addRoutes(nextBssf[0], cities, nextBssf[1])
-				''' our new head is the head is the last cite we visited'''
-				cur = self.PQ[0][0][len(self.PQ[0][0])-1]
-				'''this is in case we are about to reach the end of a route'''
-				if len(self.PQ[0][0]) == ncities: # should check if we've reached the max length of a route
-					'''check the cost of the the last two cities'''
-					nextBssf[1] = self.partials(list, cur._index, self.PQ[0][0][len(self.PQ[0][0]) - 1]._index, self.PQ[0][1])
-					nextBssf[0].append(self.PQ[0][0][len(self.PQ[0][0]) - 1])
-					'''then check the cost of going back to the first city'''
-					nextBssf[1] = self.partials(list, self.PQ[0][0][len(self.PQ[0]) - 1]._index, self.PQ[0][0][0]._index, nextBssf[1])
-
-					if nextBssf[1] < bssf.cost:
-						end_time = time.time()
-						results['cost'] = nextBssf[1]
-						results['time'] = end_time - start_time
-						results['count'] = count
-						results['soln'] = TSPSolution(nextBssf[0])
-						results['max'] = self.maxQueueSize
-						results['total'] = self.total
-						results['pruned'] = self.pruned
-						bssf.cost = nextBssf[1]
-					'''no matter what we have to pop the last thing off'''
-					self.PQ.pop(0)
-					self.pruned += 1
-					cur = self.PQ[0][0][len(self.PQ[0][0]) - 1]
-					nextBssf[1] = self.PQ[0][1]
+		while not foundAllTours and time.time() - start_time < time_allowance:
+			numNodes = nodeQueue.getLength()
+			#Keep track of the biggest queue size
+			if numNodes > maxQueue:
+			    maxQueue = numNodes
+			if(numNodes >= 1):
+			    currentNode = nodeQueue.getNextNode(ncities)
 			else:
-				self.PQ.pop(0)
-				self.pruned += 1
-				cur = self.PQ[0][0][len(self.PQ[0][0])-1]
-				nextBssf[1] = self.PQ[0][1]
+				currentNode = firstNode
+				if(endResult):
+					#My queue is empty, I am done
+					foundAllTours = True
+					print("DONE")
+					print(time.time() - start_time)
+					continue
+				endResult = True
+			alreadyUsed = currentNode.getTourIndex()
+			citiesLeft = []
+			#Get a list of options that this node can visit
+			for j in range(ncities):
+			    if not j in alreadyUsed:
+			        citiesLeft.append(cities[j])
+			if len(citiesLeft) == 0:
+                #I have reached a leaf node, and a possible solution
+				totalSolutions += 1
+				foundTour = True
+				totalCost = currentNode.getCost()
+				if totalCost < bssfCost:
+				    print(bssfCost)
+				    bssfCost = totalCost
+				    BRSF = TSPSolution(currentNode.getTour())
+				    #Counts how many nodes were pruned with new BSSF
+				    numPruned += nodeQueue.checkNewBSSF(bssfCost)
+				print("BSSF COST IS:")
+				print(bssfCost)
+				print(time.time() - start_time)
+			else:
+			    for city in citiesLeft:
+			        #Expand the node, creating a child for every possible neighbor
+			        index = cities.index(city)
+			        child = currentNode.createChild(index,city,cities,currentNode.position)
+			        statesCreated += 1
+			        childBound = child.getLowerBound()
+			        childCost = child.getCost()
+			        #I prune if the bound is above the limit, or there is no connecting path
+			        if(childBound < bssfCost and childCost < bssfCost):
+			            nodeQueue.insert(child)
+			        else:
+			            numPruned += 1
+		end_time = time.time()
+		#Adds all nodes left without being processed
+		numPruned += nodeQueue.getLength()
+		results['cost'] = BRSF.cost if foundTour else math.inf
+		results['time'] = end_time - start_time
+		results['count'] = statesCreated
+		results['soln'] = BRSF
+		results['max'] = maxQueue
+		results['total'] = totalSolutions
+		results['pruned'] = numPruned
 		return results
 
 
